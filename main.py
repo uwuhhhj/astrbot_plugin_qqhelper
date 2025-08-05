@@ -51,5 +51,5 @@ class MyPlugin(Star):
             nickname = (await client.get_stranger_info(user_id=int(user_id)))[
                            "nickname"
                        ] or "未知昵称"
-            reply = f"【收到进群申请】同意进群吗：\n昵称：{nickname}\nQQ：{user_id}\nflag：{flag}"
+            reply = f"【收到{group_id}群的进群申请】同意进群吗：\n昵称：{nickname}\nQQ：{user_id}\nflag：{flag}\n raw:{raw}"
             await client.send_group_msg(group_id=int(self.admin_group[0]), message=reply)

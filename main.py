@@ -46,10 +46,38 @@ class MyPlugin(Star):
         ):
             user_id = str(raw.get("user_id", ""))
             group_id = str(raw.get("group_id", ""))
-            comment = raw.get("comment")
+            comment = raw.get("comment", "")
             flag = raw.get("flag", "")
             nickname = (await client.get_stranger_info(user_id=int(user_id)))[
                            "nickname"
                        ] or "未知昵称"
-            reply = f"【收到{group_id}群的进群申请】同意进群吗：\n昵称：{nickname}\nQQ：{user_id}\nflag：{flag}\n raw:{raw}"
+
+            # 根据群号在simmc_group列表中的索引确定群名
+            group_name = "未知群"
+            try:
+                group_index = self.simmc_group.index(group_id)
+                group_name = f"{group_index + 1}群"
+            except ValueError:
+                # 如果群号不在列表中，使用群号作为群名
+                group_name = f"群{group_id}"
+
+            # 构造美化的消息
+            reply_lines = [
+                f"🔔 收到 {group_name} 的进群申请",
+                "━━━━━━━━━━━━━━━━━━━━",
+                f"👤 申请人：{nickname}",
+                f"🆔 QQ号：{user_id}",
+            ]
+
+            # 如果有申请理由，添加到消息中
+            if comment and comment.strip():
+                reply_lines.append(f"💬 申请理由：{comment}")
+
+            reply_lines.extend([
+                f"🏷️ Flag：{flag}",
+                "━━━━━━━━━━━━━━━━━━━━",
+                "请管理员决定是否同意该申请 ✅❌"
+            ])
+
+            reply = "\n".join(reply_lines)
             await client.send_group_msg(group_id=int(self.admin_group[0]), message=reply)

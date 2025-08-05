@@ -16,7 +16,6 @@ from typing import Dict, List, Union
 from astrbot.api.event import filter, AstrMessageEvent
 from astrbot.api.star import Context, Star, register
 from astrbot.api import logger
-from astrbot.api.storage import PluginStorage
 import astrbot.api.message_components as Comp
 
 
@@ -160,3 +159,22 @@ class MyPlugin(Star):
             self.cache_time[group_id_str] = datetime.datetime.now()
 
         return members
+
+    @filter.command("更新群成员缓存")
+    async def update_group_member(self, event: AstrMessageEvent, group_id: int):
+        """指令更新群成员列表"""
+        # 提示开始
+        yield event.plain_result("🔄 正在尝试更新群成员列表…")
+
+        # 调用缓存／拉取方法
+        members = await self._get_group_members(event, group_id)
+
+        # 如果拉取失败（返回空列表），给出失败提示
+        if not members:
+            yield event.plain_result("❌ 获取群成员列表失败，检查一下群号是否正确或机器人权限是否足够。")
+            return
+
+        # 计算数量并返回成功信息
+        count = len(members)
+        yield event.plain_result(f"✅ 群【{group_id}】成员缓存已更新，共有 {count} 位成员。")
+

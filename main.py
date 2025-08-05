@@ -1,14 +1,24 @@
-import asyncio
+
 import re
-from typing import Dict, List
-from astrbot import logger
 from astrbot.core import AstrBotConfig
-from astrbot.api.event import filter
-from astrbot.api.star import Context, Star, register
 from astrbot.core.message.components import Reply
 from astrbot.core.platform.sources.aiocqhttp.aiocqhttp_message_event import (
     AiocqhttpMessageEvent,
 )
+import asyncio
+import datetime
+import json
+import os
+import random
+from typing import Dict, List, Union
+
+# 导入AstrBot核心API
+from astrbot.api.event import filter, AstrMessageEvent
+from astrbot.api.star import Context, Star, register
+from astrbot.api import logger
+from astrbot.api.storage import PluginStorage
+import astrbot.api.message_components as Comp
+
 
 @register(
     "astrbot_plugin_qqhelper",
@@ -27,6 +37,9 @@ class MyPlugin(Star):
         self.admin_group: List[str] = config.get(
             "admin_group", []
         )  # 管理员群聊
+        # 缓存群成员列表（减少API调用）
+        self.member_cache: Dict[str, List] = {}
+        self.cache_time: Dict[str, datetime.datetime] = {}
     async def initialize(self):
         """初始化插件"""
         pass
@@ -81,3 +94,69 @@ class MyPlugin(Star):
 
             reply = "\n".join(reply_lines)
             await client.send_group_msg(group_id=int(self.admin_group[0]), message=reply)
+
+
+            # —— 新增：在其他 simmc_group 里查重 ——
+            check_lines: List[str] = []
+            for other_gid in self.simmc_group:
+                # 跳过申请发生的那个群
+                if str(other_gid) == group_id:
+                    continue
+
+                # 拉取缓存／实时成员列表
+                members = await self._get_group_members(event, int(other_gid))
+                # members 是一 list[dict]，每个 dict 里有 "user_id"
+                if any(str(m.get("user_id")) == user_id for m in members):
+                    try:
+                        idx = self.simmc_group.index(str(other_gid))
+                        name = f"{idx+1}群"
+                    except ValueError:
+                        name = f"群{other_gid}"
+                    check_lines.append(f"⚠️ 已在 {name}（{other_gid}）中")
+
+            if not check_lines:
+                check_info = (
+                    f"✅ 检查完毕：用户 {nickname}（{user_id}）"
+                    " 未在其他 simmc 群中。"
+                )
+            else:
+                check_info = "重复入群检测结果：\n" + "\n".join(check_lines)
+
+            # 把查重结果也发给管理员
+            await client.send_group_msg(
+                group_id=int(self.admin_group[0]),
+                message=check_info
+            )
+    async def _get_group_members(self, event: AstrMessageEvent, group_id: int):
+        """获取群成员列表（带缓存）"""
+        group_id_str = str(group_id)
+
+        # 检查缓存是否有效（5分钟有效期）
+        if group_id_str in self.member_cache:
+            last_update = self.cache_time.get(group_id_str)
+            if last_update and (datetime.datetime.now() - last_update).total_seconds() < 300:
+                return self.member_cache[group_id_str]
+
+        members = []
+        platform = event.get_platform_name()
+
+        # OneBot (aiocqhttp) 平台实现
+        if platform == "aiocqhttp" and AiocqhttpMessageEvent:
+            client = event.bot
+            payloads = {"group_id": group_id, "no_cache": True}
+            try:
+                ret = await client.api.call_action('get_group_member_list', **payloads)
+                members = ret
+            except Exception as e:
+                logger.error(f"获取群成员失败: {e}")
+
+        # 其他平台可以在此扩展
+        # elif platform == "other_platform":
+        #   ...
+
+        # 更新缓存
+        if members:
+            self.member_cache[group_id_str] = members
+            self.cache_time[group_id_str] = datetime.datetime.now()
+
+        return members

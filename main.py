@@ -130,10 +130,10 @@ class MyPlugin(Star):
         """获取群成员列表（带缓存）"""
         group_id_str = str(group_id)
 
-        # 检查缓存是否有效（5分钟有效期）
+        # 检查缓存是否有效（50分钟有效期）
         if group_id_str in self.member_cache:
             last_update = self.cache_time.get(group_id_str)
-            if last_update and (datetime.datetime.now() - last_update).total_seconds() < 300:
+            if last_update and (datetime.datetime.now() - last_update).total_seconds() < 3000:
                 return self.member_cache[group_id_str]
 
         members = []

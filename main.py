@@ -39,6 +39,14 @@ class MyPlugin(Star):
         # 缓存群成员列表（减少API调用）
         self.member_cache: Dict[str, List] = {}
         self.cache_time: Dict[str, datetime.datetime] = {}
+
+        self.auto_black: bool = config.get("auto_black", True)
+        self.reject_ids_list: List[dict[str, list[str]]] = config.get(
+            "reject_ids_list", [{}]
+        )
+        self.reject_ids: dict[str, list[str]] = (
+            self.reject_ids_list[0] if self.reject_ids_list else {}
+        )
     async def initialize(self):
         """初始化插件"""
         pass
@@ -113,18 +121,63 @@ class MyPlugin(Star):
                         name = f"群{other_gid}"
                     check_lines.append(f"⚠️ 已在 {name}（{other_gid}）中")
 
-            if not check_lines:
-                check_info = (
-                    f"✅ 检查完毕：用户 {nickname}（{user_id}）"
-                    " 未在其他 simmc 群中。"
+            # —— 全局黑名单检测 ——
+            # 遍历所有群的黑名单，看 user_id 出现在哪些群里
+            bl_hits: List[str] = []
+            for gid, uids in self.reject_ids.items():
+                if user_id in uids:
+                    try:
+                        idx = self.simmc_group.index(gid)
+                        grp_name = f"{idx+1}群"
+                    except ValueError:
+                        grp_name = f"群{gid}"
+                    bl_hits.append(f"{grp_name}（{gid}）")
+
+            if bl_hits:
+                # 如果有命中，把哪些群列出来
+                check_lines.append(
+                    f"🚫 黑名单检测：用户 {nickname}（{user_id}）"
+                    f" 曾在以下群主动退出并被拉黑：{','.join(bl_hits)}"
                 )
             else:
-                check_info = "重复入群检测结果：\n" + "\n".join(check_lines)
+                check_lines.append(
+                    f"✅ 黑名单检测：用户 {nickname}（{user_id}）未在任何 simmc 群主动退过。"
+                )
 
-            # 把查重结果也发给管理员
+            # —— 拼最终结果并发送 ——
+            check_info = "检测结果：\n" + "\n".join(check_lines)
             await client.send_group_msg(
                 group_id=int(self.admin_group[0]),
                 message=check_info
+            )
+
+            # 主动退群事件
+        elif (
+                self.auto_black
+                and raw.get("post_type") == "notice"
+                and raw.get("notice_type") == "group_decrease"
+                and raw.get("sub_type") == "leave"
+        ):
+            user_id = str(raw.get("user_id", ""))
+            group_id = str(raw.get("group_id", ""))
+            nickname = (await client.get_stranger_info(user_id=int(user_id)))[
+                           "nickname"
+                       ] or "未知昵称"
+            # 确保列表存在
+            ids = self.reject_ids.setdefault(group_id, [])
+            # 只有不在才追加
+            if user_id not in ids:
+                ids.append(user_id)
+                # 持久化
+                self.config["reject_ids_list"] = [self.reject_ids]
+                self.config.save_config()
+                leave_info = f"{nickname}({user_id}) 主动退群，已拉进黑名单"
+            else:
+                leave_info = f"{nickname}({user_id}) 再次退群，已在黑名单中，无需重复添加"
+
+            await client.send_group_msg(
+                group_id=int(self.admin_group[0]),
+                message=leave_info
             )
     async def _get_group_members(self, event: AstrMessageEvent, group_id: int):
         """获取群成员列表（带缓存）"""

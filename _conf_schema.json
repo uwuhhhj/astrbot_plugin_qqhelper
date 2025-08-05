@@ -10,5 +10,18 @@
     "type": "list",
     "hint": "管理员群聊，只有管理员群聊的管理员可以使用管理员命令",
     "default": []
+  },
+  "auto_black": {
+    "description": "自动拉黑",
+    "type": "bool",
+    "hint": "当用户主动退群时，是否自动拉黑（即添加到拒绝列表）",
+    "default": true
+  },
+  "reject_ids_list": {
+    "description": "拉黑列表",
+    "type": "list",
+    "hint": "主动退群者将会被拉黑（即被添加到此列表）",
+    "invisible": true,
+    "default": []
   }
 }

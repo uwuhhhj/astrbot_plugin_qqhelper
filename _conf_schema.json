@@ -1,0 +1,14 @@
+{
+  "simmc_group": {
+    "description": "检测的群聊名单",
+    "type": "list",
+    "hint": "仅检测名单的群聊，其他群聊不检测",
+    "default": []
+  },
+  "admin_group": {
+    "description": "管理员群聊",
+    "type": "list",
+    "hint": "管理员群聊，只有管理员群聊的管理员可以使用管理员命令",
+    "default": []
+  }
+}

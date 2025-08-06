@@ -100,7 +100,8 @@ class MyPlugin(Star):
             ])
 
             reply = "\n".join(reply_lines)
-            await client.send_group_msg(group_id=int(self.admin_group[0]), message=reply)
+            #不会主动发消息
+            # await client.send_group_msg(group_id=int(self.admin_group[0]), message=reply)
 
 
             # —— 新增：在其他 simmc_group 里查重 ——
@@ -144,12 +145,13 @@ class MyPlugin(Star):
                     f"✅ 黑名单检测：用户 {nickname}（{user_id}）未在任何 simmc 群主动退过。"
                 )
 
-            # —— 拼最终结果并发送 ——
-            check_info = "检测结果：\n" + "\n".join(check_lines)
-            await client.send_group_msg(
-                group_id=int(self.admin_group[0]),
-                message=check_info
-            )
+            # —— 仅当有“⚠️”或“🚫”时，才通知管理员 ——
+            if any(line.startswith("⚠️") or line.startswith("🚫") for line in check_lines):
+                check_info = "检测结果：\n" + "\n".join(check_lines)
+                await client.send_group_msg(
+                    group_id=int(self.admin_group[0]),
+                    message=check_info
+                )
 
             # 主动退群事件
         elif (
@@ -175,10 +177,10 @@ class MyPlugin(Star):
             else:
                 leave_info = f"{nickname}({user_id}) 再次退群，已在黑名单中，无需重复添加"
 
-            await client.send_group_msg(
-                group_id=int(self.admin_group[0]),
-                message=leave_info
-            )
+            #await client.send_group_msg(
+            #    group_id=int(self.admin_group[0]),
+            #    message=leave_info
+            #)
     async def _get_group_members(self, event: AstrMessageEvent, group_id: int):
         """获取群成员列表（带缓存）"""
         group_id_str = str(group_id)
@@ -230,43 +232,3 @@ class MyPlugin(Star):
         # 计算数量并返回成功信息
         count = len(members)
         yield event.plain_result(f"✅ 群【{group_id}】成员缓存已更新，共有 {count} 位成员。")
-
-    @filter.command("进行现有所有群群成员查重检查")
-    async def manual_dup_check(self, event: AstrMessageEvent):
-        """手动触发：对所有 simmc_group 群成员做重复检测（最简单实现）"""
-        # 1. 告知开始
-        yield event.plain_result("🔍 开始进行群成员查重检查，请稍候…")
-
-        bot = event.bot
-        # 2. 收集每个用户在哪些群里出现
-        dup_map: Dict[str, List[str]] = {}
-        for gid_str in self.simmc_group:
-            gid = int(gid_str)
-            members = await self._get_group_members(event, gid)  # 顺序拉
-            for m in members:
-                uid = str(m.get("user_id"))
-                dup_map.setdefault(uid, []).append(gid_str)
-
-        # 3. 找出重复的用户
-        duplicates: List[str] = []
-        for uid, gids in dup_map.items():
-            if len(gids) > 1:
-                places = []
-                for g in gids:
-                    idx = self.simmc_group.index(g)  # 找到在第几个群
-                    places.append(f"{idx+1}群({g})")
-                duplicates.append(f"⚠️ 用户 {uid} 出现在：{'，'.join(places)}")
-
-        # 4. 输出结果
-        if not duplicates:
-            yield event.plain_result("✅ 所有群成员无重复。")
-        else:
-            report = "重复检测结果：\n" + "\n".join(duplicates)
-            # 发给管理员群
-            await bot.send_group_msg(
-                group_id=int(self.admin_group[0]),
-                message=report
-            )
-            yield event.plain_result(
-                f"✅ 检测完毕，共发现 {len(duplicates)} 个重复用户，已发送至管理员群。"
-            )
